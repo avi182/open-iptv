@@ -1,0 +1,5 @@
+services:
+  openiptv:
+    build: .
+    ports:
+      - "4201:4201"
