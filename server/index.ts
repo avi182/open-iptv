@@ -1,6 +1,6 @@
 import path from "path";
 import { fileURLToPath } from "url";
-import { execFile } from "child_process";
+import { execFile, spawn } from "child_process";
 import express from "express";
 import { parseM3U } from "./parsers/m3u.js";
 import { fetchAndParseEpg } from "./parsers/epg.js";
@@ -140,6 +140,151 @@ app.get("/api/open-vlc", (req, res) => {
       return res.status(500).json({ error: "Failed to open VLC" });
     }
     res.json({ ok: true });
+  });
+});
+
+function probeStreamBitrate(url: string): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const proc = spawn("ffprobe", [
+      "-v", "quiet",
+      "-print_format", "json",
+      "-show_format",
+      "-i", url,
+    ], { stdio: ["ignore", "pipe", "pipe"] });
+
+    let stdout = "";
+    proc.stdout.on("data", (chunk: Buffer) => { stdout += chunk.toString(); });
+
+    const timeout = setTimeout(() => {
+      proc.kill("SIGTERM");
+      reject(new Error("Probe timed out"));
+    }, 15000);
+
+    proc.on("close", () => {
+      clearTimeout(timeout);
+      try {
+        const data = JSON.parse(stdout);
+        const bitrate = parseInt(data.format?.bit_rate || "0", 10);
+        resolve(bitrate);
+      } catch {
+        reject(new Error("Failed to parse probe output"));
+      }
+    });
+
+    proc.on("error", (err) => {
+      clearTimeout(timeout);
+      reject(err);
+    });
+  });
+}
+
+app.get("/api/probe", async (req, res) => {
+  const url = req.query.url as string | undefined;
+  const duration = req.query.duration as string | undefined;
+
+  if (!url) {
+    return res.status(400).json({ error: "Missing 'url' query parameter" });
+  }
+  if (!validateUrl(url)) {
+    return res.status(400).json({ error: "Invalid URL" });
+  }
+
+  try {
+    const bitrate = await probeStreamBitrate(url);
+    const dur = duration ? parseInt(duration, 10) : 0;
+    const estimatedBytes = dur > 0 && bitrate > 0 ? Math.ceil((bitrate / 8) * dur) : 0;
+    res.json({ bitrate, estimatedBytes });
+  } catch (err) {
+    console.error("Probe error:", err);
+    res.status(500).json({ error: "Failed to probe stream" });
+  }
+});
+
+app.get("/api/download", async (req, res) => {
+  const url = req.query.url as string | undefined;
+  const duration = req.query.duration as string | undefined;
+  const filename = (req.query.filename as string | undefined) || "download.mp4";
+
+  if (!url) {
+    return res.status(400).json({ error: "Missing 'url' query parameter" });
+  }
+  if (!validateUrl(url)) {
+    return res.status(400).json({ error: "Invalid URL" });
+  }
+
+  const safeFilename = filename.replace(/[^a-zA-Z0-9._\-() ]/g, "_");
+  const dur = duration ? parseInt(duration, 10) : 0;
+
+  // Probe bitrate for Content-Length so browsers can show download progress
+  let estimatedSize = 0;
+  try {
+    const bitrate = await probeStreamBitrate(url);
+    if (bitrate > 0 && dur > 0) {
+      estimatedSize = Math.ceil((bitrate / 8) * dur);
+    }
+  } catch {
+    // Probe failed — proceed without Content-Length
+  }
+
+  const args: string[] = ["-i", url];
+
+  if (dur > 0) {
+    args.push("-t", String(dur));
+  }
+
+  args.push(
+    "-c", "copy",
+    "-bsf:a", "aac_adtstoasc",
+    "-movflags", "frag_keyframe+empty_moov",
+    "-f", "mp4",
+    "pipe:1"
+  );
+
+  const ffmpeg = spawn("ffmpeg", args, {
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+
+  let headersSent = false;
+  let stderrOutput = "";
+
+  ffmpeg.stderr.on("data", (chunk: Buffer) => {
+    stderrOutput += chunk.toString();
+    if (!headersSent && stderrOutput.includes("Output #0")) {
+      headersSent = true;
+      res.setHeader("Content-Type", "video/mp4");
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="${safeFilename}"`
+      );
+      if (estimatedSize > 0) {
+        res.setHeader("Content-Length", estimatedSize);
+      }
+      ffmpeg.stdout.pipe(res);
+    }
+  });
+
+  ffmpeg.on("error", (err) => {
+    console.error("ffmpeg spawn error:", err);
+    if (!headersSent) {
+      res.status(500).json({
+        error: (err as NodeJS.ErrnoException).code === "ENOENT"
+          ? "ffmpeg is not installed on the server"
+          : "Failed to start download",
+      });
+    }
+  });
+
+  ffmpeg.on("close", (code) => {
+    if (!headersSent) {
+      console.error("ffmpeg exited with code", code, "stderr:", stderrOutput.slice(-500));
+      res.status(500).json({ error: "Failed to download stream. The stream may be unavailable." });
+    }
+  });
+
+  req.on("close", () => {
+    if (!ffmpeg.killed) {
+      ffmpeg.kill("SIGTERM");
+    }
   });
 });
 

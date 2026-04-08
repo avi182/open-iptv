@@ -745,6 +745,62 @@
   font-style: italic;
 }
 
+.programme-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.star-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--color-text-muted);
+  padding: 4px;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition-fast);
+  flex-shrink: 0;
+}
+
+.star-btn:hover {
+  color: #facc15;
+  transform: scale(1.15);
+}
+
+.star-btn.starred {
+  color: #facc15;
+}
+
+.starred-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  border-radius: var(--radius-md);
+  padding: 6px 14px;
+}
+
+.starred-btn.active {
+  background: #facc15;
+  color: #1a1a2e;
+  border-color: #facc15;
+  box-shadow: 0 2px 8px rgba(250, 204, 21, 0.3);
+}
+
+.starred-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.starred-btn:not(:disabled):hover {
+  border-color: #facc15;
+  color: #facc15;
+}
+
 .programme-actions {
   display: flex;
   gap: 8px;
@@ -791,6 +847,18 @@
   background: #ffa033;
   transform: translateY(-1px);
   box-shadow: 0 4px 12px rgba(255, 140, 0, 0.3);
+}
+
+.btn-download {
+  background: rgba(59, 130, 246, 0.08);
+  color: var(--color-download);
+  border-color: rgba(59, 130, 246, 0.2);
+}
+
+.btn-download:hover {
+  background: rgba(59, 130, 246, 0.15);
+  border-color: rgba(59, 130, 246, 0.4);
+  transform: translateY(-1px);
 }
 
 /* ═══════════════════════════════════════
@@ -1278,6 +1346,18 @@
   filter: brightness(1.15);
   transform: translateY(-1px);
   box-shadow: 0 4px 16px rgba(255, 140, 0, 0.3);
+}
+
+.live-card-btn.download {
+  background: rgba(59, 130, 246, 0.12);
+  color: var(--color-download);
+}
+
+.live-card-btn.download:hover {
+  background: rgba(59, 130, 246, 0.22);
+  color: #60a5fa;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 16px rgba(59, 130, 246, 0.2);
 }
 
 /* ═══════════════════════════════════════

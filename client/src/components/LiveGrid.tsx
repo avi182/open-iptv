@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react';
 import type { Channel, Programme } from '../types';
-import { buildStreamUrl, copyToClipboard, openInVLC } from '../utils/catchup';
+import { buildStreamUrl, copyToClipboard, downloadStream, formatFileSize, getProgrammeDuration, openInVLC, probeStream } from '../utils/catchup';
 
 interface Props {
   programmes: Programme[];
   channels: Channel[];
+  starredIds: Set<string>;
+  onToggleStar: (id: string) => void;
 }
 
 function getLiveProgress(programme: Programme): number {
@@ -30,7 +32,7 @@ function getTimeLeft(programme: Programme): string {
   return remMins > 0 ? `${hrs}h ${remMins}m left` : `${hrs}h left`;
 }
 
-function LiveCard({ programme, channel }: { programme: Programme; channel: Channel }) {
+function LiveCard({ programme, channel, isStarred, onToggleStar }: { programme: Programme; channel: Channel; isStarred: boolean; onToggleStar: (id: string) => void }) {
   const [progress, setProgress] = useState(() => getLiveProgress(programme));
   const [copied, setCopied] = useState(false);
   const streamUrl = buildStreamUrl(channel.streamUrl, programme);
@@ -42,10 +44,22 @@ function LiveCard({ programme, channel }: { programme: Programme; channel: Chann
     return () => clearInterval(interval);
   }, [programme]);
 
+  const [sizeLabel, setSizeLabel] = useState<string | null>(null);
+  const [probing, setProbing] = useState(false);
+
   async function handleCopy() {
     await copyToClipboard(streamUrl);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  }
+
+  function handleDownloadHover() {
+    if (sizeLabel || probing || !streamUrl) return;
+    setProbing(true);
+    probeStream(streamUrl, getProgrammeDuration(programme))
+      .then(bytes => setSizeLabel(bytes > 0 ? `~${formatFileSize(bytes)}` : null))
+      .catch(() => {})
+      .finally(() => setProbing(false));
   }
 
   return (
@@ -64,6 +78,15 @@ function LiveCard({ programme, channel }: { programme: Programme; channel: Chann
             {formatTimeShort(programme.start)} – {formatTimeShort(programme.stop)}
           </span>
         </div>
+        <button
+          className={`star-btn ${isStarred ? 'starred' : ''}`}
+          onClick={() => onToggleStar(programme.id)}
+          aria-label={isStarred ? 'Unstar programme' : 'Star programme'}
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill={isStarred ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+          </svg>
+        </button>
         <div className="live-card-indicator">
           <span className="live-dot" />
           LIVE
@@ -96,13 +119,26 @@ function LiveCard({ programme, channel }: { programme: Programme; channel: Chann
             </svg>
             VLC
           </button>
+          <button
+            className="live-card-btn download"
+            onClick={() => downloadStream(streamUrl, programme, channel.name)}
+            onMouseEnter={handleDownloadHover}
+            title={sizeLabel ? `Estimated size: ${sizeLabel}` : probing ? 'Estimating size...' : undefined}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="7 10 12 15 17 10" />
+              <line x1="12" y1="15" x2="12" y2="3" />
+            </svg>
+            MP4{sizeLabel ? ` (${sizeLabel})` : ''}
+          </button>
         </div>
       </div>
     </div>
   );
 }
 
-export function LiveGrid({ programmes, channels }: Props) {
+export function LiveGrid({ programmes, channels, starredIds, onToggleStar }: Props) {
   const channelMap = new Map(channels.map((c) => [c.id, c]));
 
   if (programmes.length === 0) {
@@ -114,7 +150,7 @@ export function LiveGrid({ programmes, channels }: Props) {
       {programmes.map((p) => {
         const channel = channelMap.get(p.channelId);
         if (!channel) return null;
-        return <LiveCard key={p.id} programme={p} channel={channel} />;
+        return <LiveCard key={p.id} programme={p} channel={channel} isStarred={starredIds.has(p.id)} onToggleStar={onToggleStar} />;
       })}
     </div>
   );

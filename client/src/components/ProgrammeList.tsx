@@ -5,9 +5,11 @@ interface Props {
   programmes: Programme[];
   channels: Channel[];
   selectedChannel: string;
+  starredIds: Set<string>;
+  onToggleStar: (id: string) => void;
 }
 
-export function ProgrammeList({ programmes, channels, selectedChannel }: Props) {
+export function ProgrammeList({ programmes, channels, selectedChannel, starredIds, onToggleStar }: Props) {
   const channelMap = new Map(channels.map((c) => [c.id, c]));
 
   if (programmes.length === 0) {
@@ -24,6 +26,8 @@ export function ProgrammeList({ programmes, channels, selectedChannel }: Props) 
             programme={p}
             channel={channelMap.get(p.channelId)}
             showChannel={false}
+            isStarred={starredIds.has(p.id)}
+            onToggleStar={onToggleStar}
           />
         ))}
       </div>
@@ -61,7 +65,9 @@ export function ProgrammeList({ programmes, channels, selectedChannel }: Props) 
                 programme={p}
                 channel={channel}
                 showChannel={false}
-                  />
+                isStarred={starredIds.has(p.id)}
+                onToggleStar={onToggleStar}
+              />
             ))}
           </div>
         );

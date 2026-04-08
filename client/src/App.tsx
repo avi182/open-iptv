@@ -11,9 +11,28 @@ import './App.css';
 
 const PAGE_SIZE = 100;
 const STORAGE_KEY = 'openiptv-playlist-url';
-
 function getStoredUrl(): string {
   return localStorage.getItem(STORAGE_KEY) ?? '';
+}
+
+function hashString(str: string): string {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = ((hash << 5) - hash + str.charCodeAt(i)) | 0;
+  }
+  return (hash >>> 0).toString(36);
+}
+
+function starredKey(url: string): string {
+  return `openiptv-starred-${hashString(url)}`;
+}
+
+function getStoredStarred(url: string): Set<string> {
+  try {
+    const raw = localStorage.getItem(starredKey(url));
+    if (raw) return new Set(JSON.parse(raw));
+  } catch { /* ignore corrupt data */ }
+  return new Set();
 }
 
 export default function App() {
@@ -35,11 +54,19 @@ export default function App() {
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [isRtl, setIsRtl] = useState(false);
   const [showChangeUrlDialog, setShowChangeUrlDialog] = useState(false);
+  const [starredIds, setStarredIds] = useState<Set<string>>(() => getStoredStarred(playlistUrl));
+  const [starredOnly, setStarredOnly] = useState(false);
   const deferredSearch = useDeferredValue(searchQuery);
   const isSearching = deferredSearch !== searchQuery;
   const mainContentRef = useRef<HTMLElement>(null);
 
   const searchIndex = useSearchIndex(programmes);
+
+  // Reload starred items when playlist URL changes
+  useEffect(() => {
+    setStarredIds(getStoredStarred(playlistUrl));
+    setStarredOnly(false);
+  }, [playlistUrl]);
 
   // Load data when playlistUrl is set
   useEffect(() => {
@@ -79,7 +106,7 @@ export default function App() {
   // Reset visible count when filters change
   useEffect(() => {
     setVisibleCount(PAGE_SIZE);
-  }, [deferredSearch, selectedDay, selectedGroup, selectedChannel, liveOnly]);
+  }, [deferredSearch, selectedDay, selectedGroup, selectedChannel, liveOnly, starredOnly]);
 
   // Auto-switch to "All Days" when user starts searching
   useEffect(() => {
@@ -130,6 +157,16 @@ export default function App() {
     setShowChangeUrlDialog(false);
   }, []);
 
+  const toggleStar = useCallback((programmeId: string) => {
+    setStarredIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(programmeId)) next.delete(programmeId);
+      else next.add(programmeId);
+      localStorage.setItem(starredKey(playlistUrl), JSON.stringify([...next]));
+      return next;
+    });
+  }, [playlistUrl]);
+
   const toggleRtl = useCallback(() => {
     setIsRtl((prev) => {
       document.documentElement.dir = prev ? 'ltr' : 'rtl';
@@ -145,8 +182,9 @@ export default function App() {
     liveOnly,
   });
 
-  const visibleProgrammes = filtered.slice(0, visibleCount);
-  const hasMore = visibleCount < filtered.length;
+  const starFiltered = starredOnly ? filtered.filter((p) => starredIds.has(p.id)) : filtered;
+  const visibleProgrammes = starFiltered.slice(0, visibleCount);
+  const hasMore = visibleCount < starFiltered.length;
 
   const groups = getUniqueGroups(channels);
 
@@ -214,7 +252,7 @@ export default function App() {
         <h1><span className="brand">Flick</span><span className="brand-accent">TV</span></h1>
         <div className="header-right">
           <div className="header-stats">
-            {channels.length} channels · {filtered.length} shows
+            {channels.length} channels · {starFiltered.length} shows
             {hasMore && ` (showing ${visibleCount})`}
           </div>
           <button className="change-url-btn" onClick={toggleRtl} title={isRtl ? 'Switch to LTR' : 'Switch to RTL'}>
@@ -258,18 +296,25 @@ export default function App() {
             onGroupChange={setSelectedGroup}
             liveOnly={liveOnly}
             onLiveOnlyChange={setLiveOnly}
+            starredOnly={starredOnly}
+            onStarredOnlyChange={setStarredOnly}
+            starredCount={starredIds.size}
           />
           {isSearching && <div className="search-loading">Searching...</div>}
           {liveOnly ? (
             <LiveGrid
               programmes={visibleProgrammes}
               channels={channels}
+              starredIds={starredIds}
+              onToggleStar={toggleStar}
             />
           ) : (
             <ProgrammeList
               programmes={visibleProgrammes}
               channels={channels}
               selectedChannel={selectedChannel}
+              starredIds={starredIds}
+              onToggleStar={toggleStar}
             />
           )}
           {hasMore && (
@@ -277,7 +322,7 @@ export default function App() {
               className="load-more-btn"
               onClick={() => setVisibleCount((c) => c + PAGE_SIZE)}
             >
-              Show more ({filtered.length - visibleCount} remaining)
+              Show more ({starFiltered.length - visibleCount} remaining)
             </button>
           )}
         </main>

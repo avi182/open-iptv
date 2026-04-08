@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react';
 import type { Channel, Programme } from '../types';
-import { buildStreamUrl, copyToClipboard, getProgrammeStatus, openInVLC } from '../utils/catchup';
+import { buildStreamUrl, copyToClipboard, downloadStream, formatFileSize, getProgrammeDuration, getProgrammeStatus, openInVLC, probeStream } from '../utils/catchup';
 
 interface Props {
   programme: Programme;
   channel: Channel | undefined;
   showChannel: boolean;
+  isStarred: boolean;
+  onToggleStar: (id: string) => void;
 }
 
 function formatTime(ts: number): string {
@@ -60,7 +62,7 @@ function getLiveProgress(programme: Programme): number {
   return Math.min(100, Math.max(0, (elapsed / total) * 100));
 }
 
-export function ProgrammeCard({ programme, channel, showChannel }: Props) {
+export function ProgrammeCard({ programme, channel, showChannel, isStarred, onToggleStar }: Props) {
   const [copied, setCopied] = useState(false);
   const status = getProgrammeStatus(programme);
   const streamUrl = channel ? buildStreamUrl(channel.streamUrl, programme) : '';
@@ -77,10 +79,22 @@ export function ProgrammeCard({ programme, channel, showChannel }: Props) {
     return () => clearInterval(interval);
   }, [isLive, programme]);
 
+  const [sizeLabel, setSizeLabel] = useState<string | null>(null);
+  const [probing, setProbing] = useState(false);
+
   async function handleCopy() {
     await copyToClipboard(streamUrl);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  }
+
+  function handleDownloadHover() {
+    if (sizeLabel || probing || !streamUrl) return;
+    setProbing(true);
+    probeStream(streamUrl, getProgrammeDuration(programme))
+      .then(bytes => setSizeLabel(bytes > 0 ? `~${formatFileSize(bytes)}` : null))
+      .catch(() => {})
+      .finally(() => setProbing(false));
   }
 
   const relativeTime = getRelativeTime(programme, status);
@@ -92,9 +106,20 @@ export function ProgrammeCard({ programme, channel, showChannel }: Props) {
           {formatTime(programme.start)} - {formatTime(programme.stop)}
           {relativeTime && <span className="programme-relative-time">{relativeTime}</span>}
         </div>
-        <span className={`status-badge ${status}`}>
-          {status === 'live' ? 'LIVE' : status === 'past' ? 'Archive' : 'Upcoming'}
-        </span>
+        <div className="programme-header-actions">
+          <button
+            className={`star-btn ${isStarred ? 'starred' : ''}`}
+            onClick={() => onToggleStar(programme.id)}
+            aria-label={isStarred ? 'Unstar programme' : 'Star programme'}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill={isStarred ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+            </svg>
+          </button>
+          <span className={`status-badge ${status}`}>
+            {status === 'live' ? 'LIVE' : status === 'past' ? 'Archive' : 'Upcoming'}
+          </span>
+        </div>
       </div>
       <div className="programme-title">{programme.title}</div>
       {showChannel && channel && (
@@ -123,6 +148,14 @@ export function ProgrammeCard({ programme, channel, showChannel }: Props) {
           </button>
           <button className="btn btn-vlc" onClick={() => openInVLC(streamUrl)}>
             Open in VLC
+          </button>
+          <button
+            className="btn btn-download"
+            onClick={() => downloadStream(streamUrl, programme, channel?.name)}
+            onMouseEnter={handleDownloadHover}
+            title={sizeLabel ? `Estimated size: ${sizeLabel}` : probing ? 'Estimating size...' : undefined}
+          >
+            Download MP4{sizeLabel ? ` (${sizeLabel})` : ''}
           </button>
         </div>
       )}
