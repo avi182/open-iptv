@@ -4,7 +4,7 @@
 
 **Your streams, one guide.**
 
-Browse channels, see what's on now, search programmes, catch up on past shows, and play in VLC — all from your browser.
+Browse channels, see what's on now, search programmes, catch up on past shows, download recordings, and play in VLC — all from your browser.
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Docker](https://img.shields.io/badge/docker-ready-2496ED?logo=docker&logoColor=white)](#quick-start)
@@ -23,6 +23,8 @@ Browse channels, see what's on now, search programmes, catch up on past shows, a
 - **Catch-Up TV** — replay programmes from the past 7 days on supported channels
 - **Search** — find shows instantly across titles, descriptions, and channels
 - **Filters** — by day, channel group, or individual channel
+- **Star Shows** — bookmark programmes to find them later, saved per playlist
+- **Download** — save any programme as MP4 with one click (via ffmpeg)
 - **One-Click Playback** — copy stream URLs or open directly in VLC
 - **Responsive** — works on desktop, tablet, and mobile
 
@@ -42,7 +44,8 @@ Open **http://localhost:4200** — that's it.
 
 1. Paste your M3U playlist URL and click **Load Playlist**
 2. Browse what's on now, search for shows, or explore the full schedule
-3. Click **Copy URL** or **VLC** on any programme to start watching
+3. Star shows to save them for later, or click **Download MP4** to save a recording
+4. Click **Copy URL** or **VLC** on any programme to start watching
 
 ### Custom Port
 
@@ -106,6 +109,8 @@ openiptv/
 | --- | --- |
 | `GET /api/playlist?url=<m3u-url>` | Parses an M3U playlist, returns channels + detected EPG URL |
 | `GET /api/epg?playlistUrl=<m3u-url>` | Fetches EPG programme data for the given playlist |
+| `GET /api/probe?url=<stream-url>&duration=<s>` | Probes stream bitrate and estimates file size |
+| `GET /api/download?url=<stream-url>&duration=<s>&filename=<name>` | Downloads stream as MP4 via ffmpeg |
 
 ### Tech Stack
 
@@ -114,6 +119,7 @@ openiptv/
 | Frontend | React 19, TypeScript, Vite |
 | Backend | Express, TypeScript |
 | Parsing | fast-xml-parser, zlib |
+| Streaming | ffmpeg, ffprobe |
 
 </details>
 
