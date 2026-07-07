@@ -57,17 +57,8 @@ export async function probeStream(streamUrl: string, duration: number): Promise<
   return data.estimatedBytes;
 }
 
-export function downloadStream(streamUrl: string, programme: Programme, channelName?: string): void {
-  const now = Math.floor(Date.now() / 1000);
-
-  let duration: number;
-  if (programme.stop <= now) {
-    duration = programme.stop - programme.start;
-  } else if (programme.start <= now) {
-    duration = programme.stop - now;
-  } else {
-    duration = programme.stop - programme.start;
-  }
+function buildDownloadRequest(streamUrl: string, programme: Programme, channelName: string | undefined, estimatedBytes: number): { url: string; filename: string } {
+  const duration = getProgrammeDuration(programme);
 
   const dateStr = new Date(programme.start * 1000).toISOString().slice(0, 10);
   const titleSlug = programme.title
@@ -85,11 +76,21 @@ export function downloadStream(streamUrl: string, programme: Programme, channelN
     duration: String(duration),
     filename,
   });
+  if (estimatedBytes > 0) {
+    params.set('estimatedSize', String(estimatedBytes));
+  }
 
+  return { url: `/api/download?${params.toString()}`, filename };
+}
+
+export function triggerDownload(streamUrl: string, programme: Programme, channelName: string | undefined, estimatedBytes = 0): void {
+  const { url, filename } = buildDownloadRequest(streamUrl, programme, channelName, estimatedBytes);
   const a = document.createElement('a');
-  a.href = `/api/download?${params.toString()}`;
+  a.href = url;
+  a.download = filename;
   a.style.display = 'none';
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
 }
+

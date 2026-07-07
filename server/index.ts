@@ -178,6 +178,55 @@ function probeStreamBitrate(url: string): Promise<number> {
   });
 }
 
+const SAMPLE_PROBE_SECONDS = 4;
+
+// Some HLS sources never declare a bit_rate in their format/stream metadata
+// (ffprobe returns nothing to go on). When that happens, actually remux a few
+// seconds of the real stream and measure the output bytes/sec directly —
+// slower, but it works where metadata inspection can't.
+function sampleByteRate(url: string): Promise<number> {
+  return new Promise((resolve) => {
+    const proc = spawn("ffmpeg", [
+      "-v", "quiet",
+      "-i", url,
+      "-t", String(SAMPLE_PROBE_SECONDS),
+      "-c", "copy",
+      "-bsf:a", "aac_adtstoasc",
+      "-movflags", "frag_keyframe+empty_moov",
+      "-f", "mp4",
+      "pipe:1",
+    ], { stdio: ["ignore", "pipe", "ignore"] });
+
+    let bytes = 0;
+    proc.stdout.on("data", (chunk: Buffer) => { bytes += chunk.length; });
+
+    const timeout = setTimeout(() => {
+      proc.kill("SIGTERM");
+      resolve(bytes > 0 ? bytes / SAMPLE_PROBE_SECONDS : 0);
+    }, 20_000);
+
+    proc.on("close", () => {
+      clearTimeout(timeout);
+      resolve(bytes > 0 ? bytes / SAMPLE_PROBE_SECONDS : 0);
+    });
+
+    proc.on("error", () => {
+      clearTimeout(timeout);
+      resolve(0);
+    });
+  });
+}
+
+async function estimateByteRate(url: string): Promise<number> {
+  try {
+    const bitrate = await probeStreamBitrate(url);
+    if (bitrate > 0) return bitrate / 8;
+  } catch {
+    // metadata probe failed or unsupported — fall through to a real sample
+  }
+  return sampleByteRate(url);
+}
+
 app.get("/api/probe", async (req, res) => {
   const url = req.query.url as string | undefined;
   const duration = req.query.duration as string | undefined;
@@ -189,21 +238,17 @@ app.get("/api/probe", async (req, res) => {
     return res.status(400).json({ error: "Invalid URL" });
   }
 
-  try {
-    const bitrate = await probeStreamBitrate(url);
-    const dur = duration ? parseInt(duration, 10) : 0;
-    const estimatedBytes = dur > 0 && bitrate > 0 ? Math.ceil((bitrate / 8) * dur) : 0;
-    res.json({ bitrate, estimatedBytes });
-  } catch (err) {
-    console.error("Probe error:", err);
-    res.status(500).json({ error: "Failed to probe stream" });
-  }
+  const byteRate = await estimateByteRate(url);
+  const dur = duration ? parseInt(duration, 10) : 0;
+  const estimatedBytes = dur > 0 && byteRate > 0 ? Math.ceil(byteRate * dur) : 0;
+  res.json({ bitrate: Math.round(byteRate * 8), estimatedBytes });
 });
 
 app.get("/api/download", async (req, res) => {
   const url = req.query.url as string | undefined;
   const duration = req.query.duration as string | undefined;
   const filename = (req.query.filename as string | undefined) || "download.mp4";
+  const estimatedSize = req.query.estimatedSize as string | undefined;
 
   if (!url) {
     return res.status(400).json({ error: "Missing 'url' query parameter" });
@@ -215,15 +260,15 @@ app.get("/api/download", async (req, res) => {
   const safeFilename = filename.replace(/[^a-zA-Z0-9._\-() ]/g, "_");
   const dur = duration ? parseInt(duration, 10) : 0;
 
-  // Probe bitrate for Content-Length so browsers can show download progress
-  let estimatedSize = 0;
-  try {
-    const bitrate = await probeStreamBitrate(url);
-    if (bitrate > 0 && dur > 0) {
-      estimatedSize = Math.ceil((bitrate / 8) * dur);
+  // Prefer the size the client already estimated on hover (avoids a second probe
+  // round-trip); fall back to probing ourselves so the browser still gets a
+  // Content-Length (and thus a real progress/size indicator) when the client couldn't.
+  let contentLength = estimatedSize ? parseInt(estimatedSize, 10) : 0;
+  if (!(contentLength > 0) && dur > 0) {
+    const byteRate = await estimateByteRate(url);
+    if (byteRate > 0) {
+      contentLength = Math.ceil(byteRate * dur);
     }
-  } catch {
-    // Probe failed — proceed without Content-Length
   }
 
   const args: string[] = ["-i", url];
@@ -256,8 +301,8 @@ app.get("/api/download", async (req, res) => {
         "Content-Disposition",
         `attachment; filename="${safeFilename}"`
       );
-      if (estimatedSize > 0) {
-        res.setHeader("Content-Length", estimatedSize);
+      if (contentLength > 0) {
+        res.setHeader("Content-Length", contentLength);
       }
       ffmpeg.stdout.pipe(res);
     }

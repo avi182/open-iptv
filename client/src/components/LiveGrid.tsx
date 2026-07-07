@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import type { Channel, Programme } from '../types';
-import { buildStreamUrl, copyToClipboard, downloadStream, formatFileSize, getProgrammeDuration, openInVLC, probeStream } from '../utils/catchup';
+import { buildStreamUrl, copyToClipboard, openInVLC } from '../utils/catchup';
+import { useDownload } from '../hooks/useDownload';
 
 interface Props {
   programmes: Programme[];
@@ -44,22 +45,12 @@ function LiveCard({ programme, channel, isStarred, onToggleStar }: { programme: 
     return () => clearInterval(interval);
   }, [programme]);
 
-  const [sizeLabel, setSizeLabel] = useState<string | null>(null);
-  const [probing, setProbing] = useState(false);
+  const download = useDownload(streamUrl, programme, channel.name);
 
   async function handleCopy() {
     await copyToClipboard(streamUrl);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
-  }
-
-  function handleDownloadHover() {
-    if (sizeLabel || probing || !streamUrl) return;
-    setProbing(true);
-    probeStream(streamUrl, getProgrammeDuration(programme))
-      .then(bytes => setSizeLabel(bytes > 0 ? `~${formatFileSize(bytes)}` : null))
-      .catch(() => {})
-      .finally(() => setProbing(false));
   }
 
   return (
@@ -121,16 +112,16 @@ function LiveCard({ programme, channel, isStarred, onToggleStar }: { programme: 
           </button>
           <button
             className="live-card-btn download"
-            onClick={() => downloadStream(streamUrl, programme, channel.name)}
-            onMouseEnter={handleDownloadHover}
-            title={sizeLabel ? `Estimated size: ${sizeLabel}` : probing ? 'Estimating size...' : undefined}
+            onClick={download.start}
+            onMouseEnter={download.handleHover}
+            title={download.sizeLabel ? `Estimated size: ${download.sizeLabel}` : download.probing ? 'Estimating size...' : undefined}
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
               <polyline points="7 10 12 15 17 10" />
               <line x1="12" y1="15" x2="12" y2="3" />
             </svg>
-            MP4{sizeLabel ? ` (${sizeLabel})` : ''}
+            {download.status === 'started' ? 'Started ✓' : `MP4${download.sizeLabel ? ` (${download.sizeLabel})` : ''}`}
           </button>
         </div>
       </div>

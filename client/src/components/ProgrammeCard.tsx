@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import type { Channel, Programme } from '../types';
-import { buildStreamUrl, copyToClipboard, downloadStream, formatFileSize, getProgrammeDuration, getProgrammeStatus, openInVLC, probeStream } from '../utils/catchup';
+import { buildStreamUrl, copyToClipboard, getProgrammeStatus, openInVLC } from '../utils/catchup';
+import { useDownload } from '../hooks/useDownload';
 
 interface Props {
   programme: Programme;
@@ -79,22 +80,12 @@ export function ProgrammeCard({ programme, channel, showChannel, isStarred, onTo
     return () => clearInterval(interval);
   }, [isLive, programme]);
 
-  const [sizeLabel, setSizeLabel] = useState<string | null>(null);
-  const [probing, setProbing] = useState(false);
+  const download = useDownload(streamUrl, programme, channel?.name);
 
   async function handleCopy() {
     await copyToClipboard(streamUrl);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
-  }
-
-  function handleDownloadHover() {
-    if (sizeLabel || probing || !streamUrl) return;
-    setProbing(true);
-    probeStream(streamUrl, getProgrammeDuration(programme))
-      .then(bytes => setSizeLabel(bytes > 0 ? `~${formatFileSize(bytes)}` : null))
-      .catch(() => {})
-      .finally(() => setProbing(false));
   }
 
   const relativeTime = getRelativeTime(programme, status);
@@ -151,11 +142,11 @@ export function ProgrammeCard({ programme, channel, showChannel, isStarred, onTo
           </button>
           <button
             className="btn btn-download"
-            onClick={() => downloadStream(streamUrl, programme, channel?.name)}
-            onMouseEnter={handleDownloadHover}
-            title={sizeLabel ? `Estimated size: ${sizeLabel}` : probing ? 'Estimating size...' : undefined}
+            onClick={download.start}
+            onMouseEnter={download.handleHover}
+            title={download.sizeLabel ? `Estimated size: ${download.sizeLabel}` : download.probing ? 'Estimating size...' : undefined}
           >
-            Download MP4{sizeLabel ? ` (${sizeLabel})` : ''}
+            {download.status === 'started' ? 'Download started ✓' : `Download MP4${download.sizeLabel ? ` (${download.sizeLabel})` : ''}`}
           </button>
         </div>
       )}

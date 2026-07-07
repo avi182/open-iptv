@@ -7,6 +7,7 @@ import { Filters } from './components/Filters';
 import { ChannelSidebar } from './components/ChannelSidebar';
 import { ProgrammeList } from './components/ProgrammeList';
 import { LiveGrid } from './components/LiveGrid';
+import { ChannelGrid } from './components/ChannelGrid';
 import './App.css';
 
 const PAGE_SIZE = 100;
@@ -187,6 +188,7 @@ export default function App() {
   const hasMore = visibleCount < starFiltered.length;
 
   const groups = getUniqueGroups(channels);
+  const noEpg = !loading && channels.length > 0 && programmes.length === 0;
 
   // URL entry screen
   if (!playlistUrl) {
@@ -252,8 +254,8 @@ export default function App() {
         <h1><span className="brand">Flick</span><span className="brand-accent">TV</span></h1>
         <div className="header-right">
           <div className="header-stats">
-            {channels.length} channels · {starFiltered.length} shows
-            {hasMore && ` (showing ${visibleCount})`}
+            {channels.length} channels
+            {!noEpg && <> · {starFiltered.length} shows{hasMore && ` (showing ${visibleCount})`}</>}
           </div>
           <button className="change-url-btn" onClick={toggleRtl} title={isRtl ? 'Switch to LTR' : 'Switch to RTL'}>
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
@@ -269,17 +271,20 @@ export default function App() {
         </div>
       </header>
       <div className="app-body">
-        {/* Mobile sidebar overlay */}
-        <div
-          className={`sidebar-overlay ${sidebarOpen ? 'visible' : ''}`}
-          onClick={() => setSidebarOpen(false)}
-        />
-        <ChannelSidebar
-          channels={selectedGroup ? channels.filter((c) => c.group === selectedGroup) : channels}
-          selectedChannel={selectedChannel}
-          onSelect={handleChannelSelect}
-          isOpen={sidebarOpen}
-        />
+        {!noEpg && (
+          <>
+            <div
+              className={`sidebar-overlay ${sidebarOpen ? 'visible' : ''}`}
+              onClick={() => setSidebarOpen(false)}
+            />
+            <ChannelSidebar
+              channels={selectedGroup ? channels.filter((c) => c.group === selectedGroup) : channels}
+              selectedChannel={selectedChannel}
+              onSelect={handleChannelSelect}
+              isOpen={sidebarOpen}
+            />
+          </>
+        )}
         <main className="main-content" ref={mainContentRef}>
           {epgWarning && (
             <div className="epg-warning">
@@ -287,43 +292,54 @@ export default function App() {
               <button onClick={() => setEpgWarning('')} aria-label="Dismiss">&times;</button>
             </div>
           )}
-          <SearchBar value={searchQuery} onChange={setSearchQuery} />
-          <Filters
-            selectedDay={selectedDay}
-            onDayChange={setSelectedDay}
-            groups={groups}
-            selectedGroup={selectedGroup}
-            onGroupChange={setSelectedGroup}
-            liveOnly={liveOnly}
-            onLiveOnlyChange={setLiveOnly}
-            starredOnly={starredOnly}
-            onStarredOnlyChange={setStarredOnly}
-            starredCount={starredIds.size}
-          />
-          {isSearching && <div className="search-loading">Searching...</div>}
-          {liveOnly ? (
-            <LiveGrid
-              programmes={visibleProgrammes}
+          {noEpg ? (
+            <ChannelGrid
               channels={channels}
-              starredIds={starredIds}
-              onToggleStar={toggleStar}
+              selectedGroup={selectedGroup}
+              onGroupChange={setSelectedGroup}
+              groups={groups}
             />
           ) : (
-            <ProgrammeList
-              programmes={visibleProgrammes}
-              channels={channels}
-              selectedChannel={selectedChannel}
-              starredIds={starredIds}
-              onToggleStar={toggleStar}
-            />
-          )}
-          {hasMore && (
-            <button
-              className="load-more-btn"
-              onClick={() => setVisibleCount((c) => c + PAGE_SIZE)}
-            >
-              Show more ({starFiltered.length - visibleCount} remaining)
-            </button>
+            <>
+              <SearchBar value={searchQuery} onChange={setSearchQuery} />
+              <Filters
+                selectedDay={selectedDay}
+                onDayChange={setSelectedDay}
+                groups={groups}
+                selectedGroup={selectedGroup}
+                onGroupChange={setSelectedGroup}
+                liveOnly={liveOnly}
+                onLiveOnlyChange={setLiveOnly}
+                starredOnly={starredOnly}
+                onStarredOnlyChange={setStarredOnly}
+                starredCount={starredIds.size}
+              />
+              {isSearching && <div className="search-loading">Searching...</div>}
+              {liveOnly ? (
+                <LiveGrid
+                  programmes={visibleProgrammes}
+                  channels={channels}
+                  starredIds={starredIds}
+                  onToggleStar={toggleStar}
+                />
+              ) : (
+                <ProgrammeList
+                  programmes={visibleProgrammes}
+                  channels={channels}
+                  selectedChannel={selectedChannel}
+                  starredIds={starredIds}
+                  onToggleStar={toggleStar}
+                />
+              )}
+              {hasMore && (
+                <button
+                  className="load-more-btn"
+                  onClick={() => setVisibleCount((c) => c + PAGE_SIZE)}
+                >
+                  Show more ({starFiltered.length - visibleCount} remaining)
+                </button>
+              )}
+            </>
           )}
         </main>
       </div>
@@ -340,7 +356,7 @@ export default function App() {
       </button>
 
       {/* Mobile sidebar toggle */}
-      <button
+      {!noEpg && <button
         className="sidebar-toggle"
         onClick={() => setSidebarOpen((o) => !o)}
         aria-label="Toggle channels"
@@ -348,7 +364,7 @@ export default function App() {
         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
         </svg>
-      </button>
+      </button>}
 
       {/* Change URL confirmation dialog */}
       {showChangeUrlDialog && (
