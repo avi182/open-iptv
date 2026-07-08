@@ -227,6 +227,75 @@ async function estimateByteRate(url: string): Promise<number> {
   return sampleByteRate(url);
 }
 
+interface HlsSegment {
+  url: string;
+  duration: number;
+}
+
+async function fetchHlsSegments(playlistUrl: string): Promise<{ segments: HlsSegment[]; ended: boolean }> {
+  const res = await fetch(playlistUrl, { signal: AbortSignal.timeout(10_000) });
+  if (!res.ok) throw new Error(`Playlist fetch failed: HTTP ${res.status}`);
+  const text = await res.text();
+  const ended = text.includes("#EXT-X-ENDLIST");
+
+  const base = new URL(playlistUrl);
+  const segments: HlsSegment[] = [];
+  let pendingDuration = 0;
+
+  for (const rawLine of text.split("\n")) {
+    const line = rawLine.trim();
+    if (!line) continue;
+    if (line.startsWith("#EXTINF:")) {
+      pendingDuration = parseFloat(line.slice("#EXTINF:".length).split(",")[0]) || 0;
+      continue;
+    }
+    if (!line.startsWith("#")) {
+      segments.push({ url: new URL(line, base).toString(), duration: pendingDuration });
+      pendingDuration = 0;
+    }
+  }
+  return { segments, ended };
+}
+
+const POLL_INTERVAL_MS = 1000;
+
+async function pumpCatchupSegments(
+  playlistUrl: string,
+  targetSeconds: number,
+  onChunk: (chunk: Buffer) => Promise<void> | void,
+  signal: AbortSignal
+): Promise<void> {
+  const seen = new Set<string>();
+  let accumulated = 0;
+
+  while (!signal.aborted) {
+    const { segments, ended } = await fetchHlsSegments(playlistUrl);
+    let gotNew = false;
+
+    for (const seg of segments) {
+      if (seen.has(seg.url)) continue;
+      seen.add(seg.url);
+      gotNew = true;
+
+      const segRes = await fetch(seg.url, { signal });
+      if (segRes.ok && segRes.body) {
+        for await (const chunk of segRes.body as unknown as AsyncIterable<Buffer>) {
+          await onChunk(Buffer.from(chunk));
+        }
+      }
+
+      accumulated += seg.duration;
+      if (targetSeconds > 0 && accumulated >= targetSeconds) return;
+    }
+
+    if (targetSeconds > 0 && accumulated >= targetSeconds) return;
+    if (ended && !gotNew) return;
+    if (!gotNew) {
+      await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
+    }
+  }
+}
+
 app.get("/api/probe", async (req, res) => {
   const url = req.query.url as string | undefined;
   const duration = req.query.duration as string | undefined;
@@ -260,6 +329,15 @@ app.get("/api/download", async (req, res) => {
   const safeFilename = filename.replace(/[^a-zA-Z0-9._\-() ]/g, "_");
   const dur = duration ? parseInt(duration, 10) : 0;
 
+  const abortController = new AbortController();
+  let ffmpegProcess: ReturnType<typeof spawn> | null = null;
+  res.on("close", () => {
+    abortController.abort();
+    if (ffmpegProcess && !ffmpegProcess.killed) {
+      ffmpegProcess.kill("SIGTERM");
+    }
+  });
+
   // Prefer the size the client already estimated on hover (avoids a second probe
   // round-trip); fall back to probing ourselves so the browser still gets a
   // Content-Length (and thus a real progress/size indicator) when the client couldn't.
@@ -271,7 +349,9 @@ app.get("/api/download", async (req, res) => {
     }
   }
 
-  const args: string[] = ["-i", url];
+  if (abortController.signal.aborted) return;
+
+  const args: string[] = ["-f", "mpegts", "-i", "pipe:0"];
 
   if (dur > 0) {
     args.push("-t", String(dur));
@@ -286,8 +366,11 @@ app.get("/api/download", async (req, res) => {
   );
 
   const ffmpeg = spawn("ffmpeg", args, {
-    stdio: ["ignore", "pipe", "pipe"],
+    stdio: ["pipe", "pipe", "pipe"],
   });
+  ffmpegProcess = ffmpeg;
+
+  ffmpeg.stdin.on("error", () => {});
 
   let headersSent = false;
   let stderrOutput = "";
@@ -326,11 +409,24 @@ app.get("/api/download", async (req, res) => {
     }
   });
 
-  req.on("close", () => {
-    if (!ffmpeg.killed) {
-      ffmpeg.kill("SIGTERM");
+  async function writeToStdin(chunk: Buffer): Promise<void> {
+    if (ffmpeg.stdin.destroyed) return;
+    if (!ffmpeg.stdin.write(chunk)) {
+      await new Promise<void>((resolve) => ffmpeg.stdin.once("drain", () => resolve()));
     }
-  });
+  }
+
+  pumpCatchupSegments(url, dur, writeToStdin, abortController.signal)
+    .catch((err) => {
+      if (!abortController.signal.aborted) {
+        console.error("Segment pump error:", err);
+      }
+    })
+    .finally(() => {
+      if (!ffmpeg.stdin.destroyed) {
+        ffmpeg.stdin.end();
+      }
+    });
 });
 
 // Return 404 for unknown API routes instead of serving the SPA
