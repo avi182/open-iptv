@@ -435,16 +435,19 @@ export default function VideoPlayer({ playback, currentProgramme, onClose }: { p
       <div className="watch-heading">
         <div className="watch-heading-info">
           <span className="watch-eyebrow">{playback.live ? 'NOW WATCHING' : 'CATCH-UP'}</span>
-          {displayProgramme && <h2 dir="auto">{displayProgramme.title}</h2>}
-          <div className="watch-channel">
+          <div className="watch-identity">
             <span className="watch-channel-logo" aria-hidden="true">
               {playback.channel.logo && failedLogo !== playback.channel.logo
                 ? <img src={playback.channel.logo} alt="" onError={() => setFailedLogo(playback.channel.logo)} />
                 : <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="5" width="18" height="13" rx="2" /><path d="M8 21h8M12 18v3" /></svg>}
             </span>
-            {displayProgramme ? <span dir="auto">{playback.channel.name}</span> : <h2 dir="auto">{playback.channel.name}</h2>}
+            <div className="watch-titles">
+              <h2 dir="auto">{displayProgramme?.title ?? playback.channel.name}</h2>
+              {displayProgramme
+                ? <p className="watch-channel" dir="auto">{playback.channel.name}</p>
+                : <p dir="auto">{playback.channel.group}</p>}
+            </div>
           </div>
-          {!displayProgramme && <p dir="auto">{playback.channel.group}</p>}
         </div>
         <button className="player-icon-button" onClick={onClose} aria-label="Close player" title="Close player"><Icon name="close" /></button>
       </div>
