@@ -1,0 +1,83 @@
+.watch-layout {
+  width: 100%;
+  max-width: 1440px;
+  margin: 0 auto 28px;
+  container-type: inline-size;
+}
+.watch-layout-grid {
+  display: grid;
+  grid-template-columns: minmax(230px, 280px) minmax(0, 1fr);
+  gap: 24px;
+  direction: ltr;
+}
+.watch-layout .watch-player { width: 100%; max-width: none; min-width: 0; margin: 0; }
+.watch-guide-slot { position: relative; min-width: 0; }
+.watch-guide {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+.watch-guide-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; padding: 16px; border-bottom: 1px solid var(--color-border); }
+.watch-guide-heading > div { min-width: 0; }
+.watch-guide-eyebrow { font-size: .62rem; font-weight: 700; letter-spacing: .13em; color: var(--color-text-muted); }
+.watch-guide-heading h2 { margin-top: 4px; font-size: .9rem; font-weight: 650; color: var(--color-text); overflow-wrap: anywhere; }
+.guide-current-button { flex-shrink: 0; padding: 6px 9px; border: 1px solid var(--color-border-hover); background: var(--color-surface-hover); border-radius: 6px; color: var(--color-text-secondary); font-size: .7rem; cursor: pointer; }
+.guide-current-button:hover { color: #fff; border-color: var(--color-primary); }
+.guide-navigation { margin-left: auto; display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+.guide-browse-button, .guide-programme-date { display: none; }
+.watch-guide-list { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 8px; scrollbar-gutter: stable; }
+.watch-guide-programmes { list-style: none; padding: 0; margin: 0; }
+.watch-guide-day { padding: 10px 8px 8px; color: var(--color-text-muted); font-size: .7rem; font-weight: 600; }
+.guide-programme { display: flex; flex-direction: column; gap: 7px; width: 100%; margin-bottom: 5px; padding: 13px 12px; text-align: start; background: transparent; border: 1px solid transparent; border-radius: var(--radius-md); color: var(--color-text); font-family: inherit; cursor: pointer; }
+.guide-programme:hover:not(:disabled) { background: var(--color-surface-hover); border-color: var(--color-border-hover); }
+.guide-programme.is-watching, .guide-programme.is-watching:hover { background: var(--color-primary-subtle); border-color: var(--color-primary); box-shadow: inset 3px 0 var(--color-primary); }
+.guide-programme:disabled { cursor: default; }
+.guide-programme-time { font-size: .7rem; color: var(--color-text-muted); font-variant-numeric: tabular-nums; }
+.guide-programme-title { width: 100%; text-align: start; font-size: .85rem; font-weight: 600; line-height: 1.5; overflow-wrap: anywhere; }
+.guide-programme.is-past:not(.is-watching) .guide-programme-title { color: var(--color-text-secondary); }
+.guide-programme-status { font-size: .67rem; font-weight: 500; color: var(--color-text-muted); }
+.guide-watching-label, .guide-on-now { display: flex; align-items: center; gap: 6px; }
+.guide-watching-label { color: #b7b9ff; font-weight: 650; }
+.guide-playing-icon { font-size: .65rem; }
+.guide-on-now { color: var(--color-live); }
+.guide-live-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--color-live); }
+.guide-programme-progress { height: 3px; margin-top: 3px; width: 100%; overflow: hidden; border-radius: 3px; background: #ffffff12; }
+.guide-programme-progress > span { display: block; height: 100%; background: var(--color-live); border-radius: inherit; }
+.guide-back-live { order: 3; width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px; margin: 0; padding: 9px; border-radius: 6px; border: 1px solid #ef444440; color: var(--color-live); background: #ef444410; cursor: pointer; font: inherit; font-size: .75rem; font-weight: 600; }
+.watch-guide-empty { padding: 18px 10px; color: var(--color-text-muted); font-size: .82rem; line-height: 1.6; }
+.watch-guide button:focus-visible, .watch-guide-list:focus-visible { outline: 2px solid var(--color-primary-hover); outline-offset: -2px; }
+@container (max-width: 900px) {
+  .watch-layout-grid { display: flex; flex-direction: column; gap: 0; }
+  .watch-guide-slot { order: 1; }
+  .watch-guide { position: static; border-top: 0; border-radius: 0 0 var(--radius-lg) var(--radius-lg); }
+  .watch-layout .player-frame:not(:fullscreen) { border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
+  .watch-layout .player-help { display: none; }
+  .watch-guide-heading { flex-wrap: nowrap; min-height: 44px; padding: 0 8px; gap: 4px; border-bottom: 0; }
+  .watch-guide-heading h2, .is-catchup .watch-guide-channel { display: none; }
+  .watch-guide-eyebrow { font-size: .58rem; letter-spacing: .06em; white-space: nowrap; }
+  .guide-navigation { gap: 0; }
+  .guide-current-button { min-height: 44px; padding: 6px 8px; border: 0; background: transparent; color: #b7b9ff; }
+  .guide-browse-button { display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; border: 0; border-radius: 6px; background: transparent; color: var(--color-text-secondary); font-size: 1.5rem; cursor: pointer; }
+  .guide-browse-button:hover { background: var(--color-surface-hover); color: var(--color-text); }
+  .watch-guide-list { flex: none; overflow-x: auto; overflow-y: hidden; padding: 0 12px 10px; scroll-padding-inline: 12px; scroll-snap-type: x proximity; scrollbar-gutter: auto; scrollbar-width: none; overscroll-behavior-x: contain; overscroll-behavior-y: auto; }
+  .watch-guide-list::-webkit-scrollbar { display: none; }
+  .watch-guide-programmes { display: flex; gap: 10px; align-items: stretch; }
+  .watch-guide-programmes > li { flex: 0 0 min(252px, 88%); min-width: 0; scroll-snap-align: start; }
+  .watch-guide-day { display: none; }
+  .guide-programme { position: relative; height: 100%; min-height: 88px; margin: 0; padding: 9px 10px; gap: 4px; border-color: var(--color-border); background: transparent; }
+  .guide-programme.is-watching, .guide-programme.is-watching:hover { box-shadow: inset 2px 0 var(--color-primary); }
+  .guide-programme-status { order: -2; margin: 0; font-size: .67rem; }
+  .guide-watching-label { gap: 4px; }
+  .guide-playback-mode { font-weight: 400; color: var(--color-text-secondary); }
+  .guide-programme-title { order: -1; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; font-size: .82rem; line-height: 1.35; }
+  .guide-programme-meta { margin-top: auto; font-size: .62rem; line-height: 1.4; color: var(--color-text-muted); }
+  .guide-programme-date { display: inline; }
+  .guide-programme-time { font-size: inherit; white-space: nowrap; }
+  .guide-programme-progress { position: absolute; left: 10px; bottom: 0; width: calc(100% - 20px); height: 2px; margin: 0; }
+  .guide-back-live { order: 0; width: auto; flex-shrink: 0; min-height: 44px; margin: 0; padding: 6px 4px; border: 0; background: transparent; font-size: .7rem; }
+}

@@ -4,9 +4,15 @@ import { execFile, spawn } from "child_process";
 import express from "express";
 import { parseM3U } from "./parsers/m3u.js";
 import { fetchAndParseEpg } from "./parsers/epg.js";
+import { createPlaybackService } from "./playback.js";
 import type { Channel, Programme } from "./types.js";
 
 const app = express();
+const playbackService = createPlaybackService();
+app.use("/api/playback", express.json({ limit: "8kb" }), playbackService.router);
+for (const signal of ["SIGINT", "SIGTERM"] as const) {
+  process.once(signal, () => { void playbackService.dispose().finally(() => process.exit(0)); });
+}
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 4201;
 
 // Serve the built client in production

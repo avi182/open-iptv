@@ -1,7 +1,6 @@
 import type { Programme } from '../types';
 
-export function buildStreamUrl(baseStreamUrl: string, programme: Programme): string {
-  const now = Math.floor(Date.now() / 1000);
+export function buildStreamUrl(baseStreamUrl: string, programme: Programme, now = Math.floor(Date.now() / 1000)): string {
   const isPast = programme.stop < now;
 
   if (isPast) {
@@ -13,8 +12,7 @@ export function buildStreamUrl(baseStreamUrl: string, programme: Programme): str
   return baseStreamUrl;
 }
 
-export function getProgrammeStatus(programme: Programme): 'past' | 'live' | 'future' {
-  const now = Math.floor(Date.now() / 1000);
+export function getProgrammeStatus(programme: Programme, now = Math.floor(Date.now() / 1000)): 'past' | 'live' | 'future' {
   if (programme.stop < now) return 'past';
   if (programme.start <= now && programme.stop >= now) return 'live';
   return 'future';
@@ -23,14 +21,6 @@ export function getProgrammeStatus(programme: Programme): 'past' | 'live' | 'fut
 
 export function copyToClipboard(text: string): Promise<void> {
   return navigator.clipboard.writeText(text);
-}
-
-export async function openInVLC(url: string): Promise<void> {
-  const res = await fetch(`/api/open-vlc?url=${encodeURIComponent(url)}`);
-  if (!res.ok) {
-    const { error } = await res.json();
-    throw new Error(error || 'Failed to open VLC');
-  }
 }
 
 export function formatFileSize(bytes: number): string {

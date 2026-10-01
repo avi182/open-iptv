@@ -1,6 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useContext, useState, useEffect } from 'react';
+import { SettingsContext } from '../contexts/SettingsContext';
 import type { Channel, Programme } from '../types';
-import { buildStreamUrl, copyToClipboard, getProgrammeStatus, openInVLC } from '../utils/catchup';
+import { buildStreamUrl, copyToClipboard, getProgrammeStatus } from '../utils/catchup';
+import { createPlayback } from '../utils/playback';
 import { useDownload } from '../hooks/useDownload';
 
 interface Props {
@@ -9,6 +11,7 @@ interface Props {
   showChannel: boolean;
   isStarred: boolean;
   onToggleStar: (id: string) => void;
+  onPlay: (channel: Channel, programme?: Programme) => void;
 }
 
 function formatTime(ts: number): string {
@@ -63,11 +66,12 @@ function getLiveProgress(programme: Programme): number {
   return Math.min(100, Math.max(0, (elapsed / total) * 100));
 }
 
-export function ProgrammeCard({ programme, channel, showChannel, isStarred, onToggleStar }: Props) {
+export function ProgrammeCard({ programme, channel, showChannel, isStarred, onToggleStar, onPlay }: Props) {
+  const { showCopy, showDownload } = useContext(SettingsContext);
   const [copied, setCopied] = useState(false);
   const status = getProgrammeStatus(programme);
   const streamUrl = channel ? buildStreamUrl(channel.streamUrl, programme) : '';
-  const canPlay = status === 'past' && channel && channel.catchupDays > 0;
+  const canPlay = channel && createPlayback(channel, programme) !== null;
   const isLive = status === 'live';
 
   const [progress, setProgress] = useState(() => isLive ? getLiveProgress(programme) : 0);
@@ -132,22 +136,20 @@ export function ProgrammeCard({ programme, channel, showChannel, isStarred, onTo
           <div className="live-progress-bar" style={{ width: `${progress}%` }} />
         </div>
       )}
-      {(canPlay || isLive) && (
+      {canPlay && channel && (
         <div className="programme-actions">
-          <button className={`btn btn-copy ${copied ? 'copied' : ''}`} onClick={handleCopy}>
+          <button className="btn btn-watch" onClick={() => onPlay(channel, programme)}><span className="watch-button-icon" aria-hidden="true"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M5 3.5a.75.75 0 0 1 1.13-.65l7 4.5a.75.75 0 0 1 0 1.3l-7 4.5A.75.75 0 0 1 5 12.5Z" /></svg></span><span>{isLive ? 'Watch live' : 'Watch catch-up'}</span></button>
+          {showCopy && <button className={`btn btn-copy ${copied ? 'copied' : ''}`} onClick={handleCopy}>
             {copied ? 'Copied!' : 'Copy URL'}
-          </button>
-          <button className="btn btn-vlc" onClick={() => openInVLC(streamUrl)}>
-            Open in VLC
-          </button>
-          <button
+          </button>}
+          {showDownload && <button
             className="btn btn-download"
             onClick={download.start}
             onMouseEnter={download.handleHover}
             title={download.sizeLabel ? `Estimated size: ${download.sizeLabel}` : download.probing ? 'Estimating size...' : undefined}
           >
             {download.status === 'started' ? 'Download started ✓' : `Download MP4${download.sizeLabel ? ` (${download.sizeLabel})` : ''}`}
-          </button>
+          </button>}
         </div>
       )}
     </div>

@@ -1,4 +1,4 @@
-import { useEffect, useState, useDeferredValue, useRef, useCallback } from 'react';
+import { useEffect, useState, useDeferredValue, useRef, useCallback, lazy, Suspense } from 'react';
 import type { Channel, Programme } from './types';
 import { fetchChannels, fetchProgrammes } from './api';
 import { useFilteredProgrammes, useSearchIndex, getUniqueGroups } from './hooks/useFilteredProgrammes';
@@ -8,7 +8,12 @@ import { ChannelSidebar } from './components/ChannelSidebar';
 import { ProgrammeList } from './components/ProgrammeList';
 import { LiveGrid } from './components/LiveGrid';
 import { ChannelGrid } from './components/ChannelGrid';
+import { SettingsDialog } from './components/SettingsDialog';
+import { SettingsContext, SETTINGS_KEY, readSettings } from './contexts/SettingsContext';
+import { createPlayback, type Playback } from './utils/playback';
 import './App.css';
+
+const WatchPanel = lazy(() => import('./components/WatchPanel'));
 
 const PAGE_SIZE = 100;
 const STORAGE_KEY = 'openiptv-playlist-url';
@@ -44,6 +49,7 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [epgWarning, setEpgWarning] = useState('');
+  const [playback, setPlayback] = useState<Playback | null>(null);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
@@ -55,13 +61,21 @@ export default function App() {
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [isRtl, setIsRtl] = useState(false);
   const [showChangeUrlDialog, setShowChangeUrlDialog] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [settings, setSettings] = useState(readSettings);
   const [starredIds, setStarredIds] = useState<Set<string>>(() => getStoredStarred(playlistUrl));
   const [starredOnly, setStarredOnly] = useState(false);
   const deferredSearch = useDeferredValue(searchQuery);
   const isSearching = deferredSearch !== searchQuery;
   const mainContentRef = useRef<HTMLElement>(null);
+  const channelsToggleRef = useRef<HTMLButtonElement>(null);
 
   const searchIndex = useSearchIndex(programmes);
+
+  useEffect(() => {
+    try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); }
+    catch { /* Preferences still work when browser storage is unavailable. */ }
+  }, [settings]);
 
   // Reload starred items when playlist URL changes
   useEffect(() => {
@@ -132,10 +146,19 @@ export default function App() {
     mainContentRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
   }, []);
 
+  const handlePlay = useCallback((channel: Channel, programme?: Programme) => {
+    const next = createPlayback(channel, programme);
+    if (!next) return;
+    setPlayback(next);
+    mainContentRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+  }, []);
+
   const handleChannelSelect = useCallback((channelId: string) => {
     setSelectedChannel(channelId);
     setSidebarOpen(false);
-  }, []);
+    const channel = channels.find(c => c.id === channelId);
+    if (channel) handlePlay(channel);
+  }, [channels, handlePlay]);
 
   const handleUrlSubmit = useCallback((url: string) => {
     const trimmed = url.trim();
@@ -149,6 +172,8 @@ export default function App() {
   }, []);
 
   const confirmChangeUrl = useCallback(() => {
+    setPlayback(null);
+    setSelectedChannel('');
     setPlaylistUrl('');
     setChannels([]);
     setProgrammes([]);
@@ -249,9 +274,24 @@ export default function App() {
   }
 
   return (
+    <SettingsContext.Provider value={settings}>
     <div className="app">
       <header className="app-header">
         <h1><span className="brand">Flick</span><span className="brand-accent">TV</span></h1>
+        {!noEpg && <button
+          className="sidebar-toggle"
+          ref={channelsToggleRef}
+          onClick={() => setSidebarOpen((o) => !o)}
+          aria-label="Toggle channels"
+          aria-expanded={sidebarOpen}
+          aria-controls="channel-sidebar"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.7} stroke="currentColor" aria-hidden="true">
+            <rect x="3" y="4" width="18" height="13" rx="3" />
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9 21h6m-3-4v4m-2-13 5 3-5 3V8Z" />
+          </svg>
+          <span>Channels</span>
+        </button>}
         <div className="header-right">
           <div className="header-stats">
             {channels.length} channels
@@ -262,7 +302,7 @@ export default function App() {
               <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21 3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
             </svg>
           </button>
-          <button className="change-url-btn" onClick={handleChangeUrl} title="Change playlist URL">
+          <button className="change-url-btn" onClick={() => setShowSettings(true)} title="Settings" aria-label="Settings" aria-haspopup="dialog">
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.248a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.28Z" />
               <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
@@ -280,12 +320,19 @@ export default function App() {
             <ChannelSidebar
               channels={selectedGroup ? channels.filter((c) => c.group === selectedGroup) : channels}
               selectedChannel={selectedChannel}
+              playingChannel={playback?.channel.id ?? ''}
               onSelect={handleChannelSelect}
               isOpen={sidebarOpen}
+              onClose={() => { setSidebarOpen(false); channelsToggleRef.current?.focus(); }}
             />
           </>
         )}
         <main className="main-content" ref={mainContentRef}>
+          {playback && (
+            <Suspense fallback={<div className="empty-state" role="status">Loading player…</div>}>
+              <WatchPanel key={`${playback.channel.id}:${playback.url}`} playback={playback} programmes={programmes} onPlay={handlePlay} onClose={() => setPlayback(null)} />
+            </Suspense>
+          )}
           {epgWarning && (
             <div className="epg-warning">
               <span>{epgWarning}</span>
@@ -298,6 +345,7 @@ export default function App() {
               selectedGroup={selectedGroup}
               onGroupChange={setSelectedGroup}
               groups={groups}
+              onPlay={handlePlay}
             />
           ) : (
             <>
@@ -320,6 +368,7 @@ export default function App() {
                   programmes={visibleProgrammes}
                   channels={channels}
                   starredIds={starredIds}
+                  onPlay={handlePlay}
                   onToggleStar={toggleStar}
                 />
               ) : (
@@ -328,6 +377,7 @@ export default function App() {
                   channels={channels}
                   selectedChannel={selectedChannel}
                   starredIds={starredIds}
+                  onPlay={handlePlay}
                   onToggleStar={toggleStar}
                 />
               )}
@@ -355,16 +405,12 @@ export default function App() {
         </svg>
       </button>
 
-      {/* Mobile sidebar toggle */}
-      {!noEpg && <button
-        className="sidebar-toggle"
-        onClick={() => setSidebarOpen((o) => !o)}
-        aria-label="Toggle channels"
-      >
-        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
-        </svg>
-      </button>}
+      {showSettings && <SettingsDialog
+        settings={settings}
+        onChange={setSettings}
+        onClose={() => setShowSettings(false)}
+        onChangePlaylist={() => { setShowSettings(false); handleChangeUrl(); }}
+      />}
 
       {/* Change URL confirmation dialog */}
       {showChangeUrlDialog && (
@@ -380,5 +426,6 @@ export default function App() {
         </div>
       )}
     </div>
+    </SettingsContext.Provider>
   );
 }

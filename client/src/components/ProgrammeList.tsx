@@ -7,9 +7,10 @@ interface Props {
   selectedChannel: string;
   starredIds: Set<string>;
   onToggleStar: (id: string) => void;
+  onPlay: (channel: Channel, programme?: Programme) => void;
 }
 
-export function ProgrammeList({ programmes, channels, selectedChannel, starredIds, onToggleStar }: Props) {
+export function ProgrammeList({ programmes, channels, selectedChannel, starredIds, onToggleStar, onPlay }: Props) {
   const channelMap = new Map(channels.map((c) => [c.id, c]));
 
   if (programmes.length === 0) {
@@ -28,6 +29,7 @@ export function ProgrammeList({ programmes, channels, selectedChannel, starredId
             showChannel={false}
             isStarred={starredIds.has(p.id)}
             onToggleStar={onToggleStar}
+            onPlay={onPlay}
           />
         ))}
       </div>
@@ -67,6 +69,7 @@ export function ProgrammeList({ programmes, channels, selectedChannel, starredId
                 showChannel={false}
                 isStarred={starredIds.has(p.id)}
                 onToggleStar={onToggleStar}
+                onPlay={onPlay}
               />
             ))}
           </div>

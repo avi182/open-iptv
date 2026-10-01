@@ -5,26 +5,29 @@ const MIN_WIDTH = 180;
 const MAX_WIDTH = 480;
 const DEFAULT_WIDTH = 280;
 const STORAGE_KEY = 'sidebar-width';
+const MOBILE_LAYOUT = '(max-width: 768px), (max-width: 1024px) and (max-height: 600px)';
 
 function useIsDesktop(): boolean {
   return useSyncExternalStore(
     (cb) => {
-      const mql = window.matchMedia('(min-width: 769px)');
+      const mql = window.matchMedia(MOBILE_LAYOUT);
       mql.addEventListener('change', cb);
       return () => mql.removeEventListener('change', cb);
     },
-    () => window.matchMedia('(min-width: 769px)').matches,
+    () => !window.matchMedia(MOBILE_LAYOUT).matches,
   );
 }
 
 interface Props {
   channels: Channel[];
   selectedChannel: string;
+  playingChannel: string;
   onSelect: (channelId: string) => void;
+  onClose: () => void;
   isOpen?: boolean;
 }
 
-export function ChannelSidebar({ channels, selectedChannel, onSelect, isOpen }: Props) {
+export function ChannelSidebar({ channels, selectedChannel, playingChannel, onSelect, onClose, isOpen }: Props) {
   const [channelSearch, setChannelSearch] = useState('');
   const isDesktop = useIsDesktop();
   const [width, setWidth] = useState(() => {
@@ -74,17 +77,25 @@ export function ChannelSidebar({ channels, selectedChannel, onSelect, isOpen }: 
 
   return (
     <div
+      id="channel-sidebar"
       ref={sidebarRef}
       className={`channel-sidebar ${isOpen ? 'open' : ''}`}
       style={{ width: isDesktop ? width : undefined }}
     >
       <div className="sidebar-header">
         <h3>Channels ({filteredChannels.length})</h3>
-        {selectedChannel && (
-          <button className="clear-channel" onClick={() => onSelect('')}>
-            Clear
-          </button>
-        )}
+        <div className="sidebar-header-actions">
+          {selectedChannel && (
+            <button className="clear-channel" onClick={() => onSelect('')}>
+              Clear
+            </button>
+          )}
+          {!isDesktop && <button className="sidebar-close" onClick={onClose} aria-label="Close channels" title="Close channels">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} aria-hidden="true">
+              <path strokeLinecap="round" d="m6 6 12 12M18 6 6 18" />
+            </svg>
+          </button>}
+        </div>
       </div>
       <div className="channel-search">
         <input
@@ -105,7 +116,7 @@ export function ChannelSidebar({ channels, selectedChannel, onSelect, isOpen }: 
           <button
             key={ch.id}
             className={`channel-item ${selectedChannel === ch.id ? 'active' : ''}`}
-            onClick={() => onSelect(ch.id === selectedChannel ? '' : ch.id)}
+            onClick={() => onSelect(ch.id)}
           >
             <img
               src={ch.logo}
@@ -114,6 +125,7 @@ export function ChannelSidebar({ channels, selectedChannel, onSelect, isOpen }: 
               onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
             />
             <span className="channel-name">{ch.name}</span>
+            {playingChannel === ch.id && <span className="now-playing-dot" aria-label="Now watching" title="Now watching" />}
             {ch.catchupDays > 0 && <span className="catchup-badge">{ch.catchupDays}d</span>}
           </button>
         ))}
